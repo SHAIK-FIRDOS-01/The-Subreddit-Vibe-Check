@@ -8,12 +8,14 @@ function App() {
   const [error, setError] = useState(null);
   const [pulseData, setPulseData] = useState(null);
 
+  const API_BASE_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, '');
+
   const fetchPulse = async (subreddit) => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`http://localhost:8000/api/pulse/${subreddit}`);
+      const response = await fetch(`${API_BASE_URL}/api/pulse/${subreddit}`);
       if (!response.ok) {
         let errorMessage = 'Failed to fetch data for r/' + subreddit;
         try {
