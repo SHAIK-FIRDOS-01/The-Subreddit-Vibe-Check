@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pytest
+httpx
+pytest-httpx
+pytest-asyncio
+vaderSentiment
+feedparser

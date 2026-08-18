@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-dim text-on-surface min-h-screen flex flex-col font-data-tabular selection:bg-primary-container selection:text-on-primary-container;
+    font-family: 'JetBrains Mono', monospace;
+    background-image: linear-gradient(to right, rgba(132, 147, 150, 0.05) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(132, 147, 150, 0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+}
+
+@layer utilities {
+  .animate-in {
+    animation: animate-in 0.5s ease-out both;
+  }
+  .fade-in {
+    animation-name: fadeIn;
+  }
+  .slide-in-from-bottom-4 {
+    animation-name: slideInFromBottom;
+  }
+
+  .grid-bg {
+    background-image: linear-gradient(to right, rgba(132, 147, 150, 0.05) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(132, 147, 150, 0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  
+  .breathing-dot {
+    animation: breathe 2s infinite ease-in-out;
+  }
+  
+  .bg-mint-10 { background-color: rgba(0, 226, 150, 0.1); }
+  .bg-amber-10 { background-color: rgba(255, 186, 75, 0.1); }
+  .bg-coral-10 { background-color: rgba(255, 180, 171, 0.1); }
+  
+  .border-mint { border-color: #00e296; }
+  .border-amber { border-color: #ffba4b; }
+  .border-coral { border-color: #ffb4ab; }
+  
+  .text-mint { color: #00e296; }
+  .text-amber { color: #ffba4b; }
+  .text-coral { color: #ffb4ab; }
+
+  .border-hairline { border-width: 1px; border-color: #3b494c; }
+  .divider-h { height: 1px; background-color: #3b494c; width: 100%; }
+  .divider-v { width: 1px; background-color: #3b494c; height: 100%; }
+
+  .search-focused input:focus {
+    box-shadow: 0 0 0 2px #00e5ff;
+    outline: none;
+    border-color: transparent;
+  }
+  .search-error input {
+    border-color: #ffb4ab;
+  }
+  .search-error input:focus {
+    box-shadow: 0 0 0 2px #ffb4ab;
+  }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInFromBottom {
+  from { transform: translateY(1rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
