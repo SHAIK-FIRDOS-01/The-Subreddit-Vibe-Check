@@ -5,15 +5,15 @@ import HeroSearch from './components/HeroSearch';
 describe('HeroSearch', () => {
   it('renders correctly and has input field', () => {
     render(<HeroSearch onSearch={vi.fn()} loading={false} />);
-    expect(screen.getByPlaceholderText(/Enter subreddit name/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Analyze Vibe/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Enter subreddit/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /CHECK THE VIBE/i })).toBeInTheDocument();
   });
 
-  it('calls onSearch when a quick beat is clicked', () => {
+  it('calls onSearch when a quick select is clicked', () => {
     const mockOnSearch = vi.fn();
     render(<HeroSearch onSearch={mockOnSearch} loading={false} />);
     
-    const nflButton = screen.getByRole('button', { name: 'r/nfl' });
+    const nflButton = screen.getByRole('button', { name: /r\/nfl/i });
     fireEvent.click(nflButton);
     expect(mockOnSearch).toHaveBeenCalledWith('nfl');
   });
@@ -22,10 +22,10 @@ describe('HeroSearch', () => {
     const mockOnSearch = vi.fn();
     render(<HeroSearch onSearch={mockOnSearch} loading={false} />);
     
-    const input = screen.getByPlaceholderText(/Enter subreddit name/i);
+    const input = screen.getByPlaceholderText(/Enter subreddit/i);
     fireEvent.change(input, { target: { value: 'nfl' } });
     
-    const submitBtn = screen.getByRole('button', { name: /Analyze Vibe/i });
+    const submitBtn = screen.getByRole('button', { name: /CHECK THE VIBE/i });
     fireEvent.click(submitBtn);
     
     expect(mockOnSearch).toHaveBeenCalledWith('nfl');
@@ -35,10 +35,10 @@ describe('HeroSearch', () => {
     const mockOnSearch = vi.fn();
     render(<HeroSearch onSearch={mockOnSearch} loading={false} />);
     
-    const input = screen.getByPlaceholderText(/Enter subreddit name/i);
+    const input = screen.getByPlaceholderText(/Enter subreddit/i);
     fireEvent.change(input, { target: { value: 'r/nfl' } });
     
-    const submitBtn = screen.getByRole('button', { name: /Analyze Vibe/i });
+    const submitBtn = screen.getByRole('button', { name: /CHECK THE VIBE/i });
     fireEvent.click(submitBtn);
     
     expect(mockOnSearch).toHaveBeenCalledWith('nfl');
@@ -48,10 +48,10 @@ describe('HeroSearch', () => {
     const mockOnSearch = vi.fn();
     render(<HeroSearch onSearch={mockOnSearch} loading={false} />);
     
-    const input = screen.getByPlaceholderText(/Enter subreddit name/i);
+    const input = screen.getByPlaceholderText(/Enter subreddit/i);
     fireEvent.change(input, { target: { value: ' nfl ' } });
     
-    const submitBtn = screen.getByRole('button', { name: /Analyze Vibe/i });
+    const submitBtn = screen.getByRole('button', { name: /CHECK THE VIBE/i });
     fireEvent.click(submitBtn);
     
     expect(mockOnSearch).toHaveBeenCalledWith('nfl');
@@ -61,7 +61,7 @@ describe('HeroSearch', () => {
     const mockOnSearch = vi.fn();
     render(<HeroSearch onSearch={mockOnSearch} loading={false} />);
     
-    const submitBtn = screen.getByRole('button', { name: /Analyze Vibe/i });
+    const submitBtn = screen.getByRole('button', { name: /CHECK THE VIBE/i });
     fireEvent.click(submitBtn);
     
     expect(mockOnSearch).not.toHaveBeenCalled();
@@ -72,10 +72,10 @@ describe('HeroSearch', () => {
     const mockOnSearch = vi.fn();
     render(<HeroSearch onSearch={mockOnSearch} loading={false} />);
     
-    const input = screen.getByPlaceholderText(/Enter subreddit name/i);
+    const input = screen.getByPlaceholderText(/Enter subreddit/i);
     fireEvent.change(input, { target: { value: 'not a valid subreddit!' } });
     
-    const submitBtn = screen.getByRole('button', { name: /Analyze Vibe/i });
+    const submitBtn = screen.getByRole('button', { name: /CHECK THE VIBE/i });
     fireEvent.click(submitBtn);
     
     expect(mockOnSearch).not.toHaveBeenCalled();

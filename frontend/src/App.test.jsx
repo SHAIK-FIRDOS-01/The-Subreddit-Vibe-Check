@@ -1,6 +1,25 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from './App';
+
+// Helper: create a mock fetch that handles /api/config and any other calls.
+function createMockFetch({ dataSource = 'live', availableSubreddits = null, responses = [] } = {}) {
+  const configPayload = { data_source: dataSource };
+  if (dataSource === 'cached' && availableSubreddits) {
+    configPayload.available_subreddits = availableSubreddits;
+  }
+
+  let callIndex = 0;
+  return vi.fn((url) => {
+    if (typeof url === 'string' && url.includes('/api/config')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(configPayload) });
+    }
+    const resp = responses[callIndex++];
+    if (resp instanceof Error) return Promise.reject(resp);
+    if (resp && typeof resp.then === 'function') return resp;
+    return Promise.resolve(resp);
+  });
+}
 
 describe('App Error Handling', () => {
   beforeEach(() => {
@@ -8,116 +27,164 @@ describe('App Error Handling', () => {
   });
 
   it('handles a successful request and preserves it across subsequent requests until success', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        subreddit: 'nba',
-        aggregate_vibe_score: 0.5,
-        posts: [{ title: 'Great game', sentiment_score: 0.5 }]
-      })
+    global.fetch = createMockFetch({
+      dataSource: 'live',
+      responses: [
+        {
+          ok: true,
+          json: () => Promise.resolve({
+            subreddit: 'nba',
+            aggregate_vibe_score: 0.5,
+            posts: [{ title: 'Great game', sentiment_score: 0.5 }]
+          })
+        },
+        {
+          ok: false,
+          json: () => Promise.resolve({ detail: "Subreddit 'r/invalid' not found." })
+        }
+      ]
     });
 
-    render(<App />);
-    
+    await act(async () => { render(<App />); });
+
     // Search 'nba'
-    fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'nba' } });
-    fireEvent.click(screen.getByRole('button', { name: /Analyze Vibe/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Great game')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'nba' } });
+      fireEvent.click(screen.getByRole('button', { name: /CHECK THE VIBE/i }));
     });
+    expect(screen.getAllByText(/Great game/)[0]).toBeInTheDocument();
 
-    // Mock a failure for the next request
-    global.fetch.mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ detail: "Subreddit 'r/invalid' not found." })
+    // Search 'invalid' — previous results should persist
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'invalid' } });
+      fireEvent.click(screen.getByRole('button', { name: /CHECK THE VIBE/i }));
     });
-
-    // Search 'invalid'
-    fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'invalid' } });
-    fireEvent.click(screen.getByRole('button', { name: /Analyze Vibe/i }));
-
-    // The previous successful result should STILL be preserved, and the new error should appear
-    await waitFor(() => {
-      expect(screen.getByText("Subreddit 'r/invalid' not found.")).toBeInTheDocument();
-      expect(screen.getByText('Great game')).toBeInTheDocument();
-    });
+    expect(screen.getAllByText(/Subreddit 'r\/invalid' not found\./)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/Great game/)[0]).toBeInTheDocument();
   });
 
   it('shows friendly message when backend is unavailable (network error)', async () => {
-    global.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-
-    render(<App />);
-    
-    fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'nba' } });
-    fireEvent.click(screen.getByRole('button', { name: /Analyze Vibe/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Cannot connect to the backend server. Please try again later.')).toBeInTheDocument();
+    global.fetch = createMockFetch({
+      dataSource: 'live',
+      responses: [new TypeError('Failed to fetch')]
     });
+
+    await act(async () => { render(<App />); });
+
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'nba' } });
+      fireEvent.click(screen.getByRole('button', { name: /CHECK THE VIBE/i }));
+    });
+    expect(screen.getAllByText(/Cannot connect to the backend server\. Please try again later\./)[0]).toBeInTheDocument();
   });
 
-  it('shows friendly message when RSS upstream fails (502 from backend)', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ detail: "Failed to connect to Reddit." })
+  it('shows friendly message when RSS upstream fails (503 from backend)', async () => {
+    global.fetch = createMockFetch({
+      dataSource: 'live',
+      responses: [{
+        ok: false,
+        json: () => Promise.resolve({ detail: "Failed to connect to Reddit." })
+      }]
     });
 
-    render(<App />);
-    
-    fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'nba' } });
-    fireEvent.click(screen.getByRole('button', { name: /Analyze Vibe/i }));
+    await act(async () => { render(<App />); });
 
-    await waitFor(() => {
-      expect(screen.getByText('Failed to connect to Reddit.')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'nba' } });
+      fireEvent.click(screen.getByRole('button', { name: /CHECK THE VIBE/i }));
     });
+    expect(screen.getAllByText(/Failed to connect to Reddit\./)[0]).toBeInTheDocument();
   });
 
   it('shows friendly message for empty feed (404 from backend)', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ detail: "No recent posts found in r/empty." })
+    global.fetch = createMockFetch({
+      dataSource: 'live',
+      responses: [{
+        ok: false,
+        json: () => Promise.resolve({ detail: "No recent posts found in r/empty." })
+      }]
     });
 
-    render(<App />);
-    
-    fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'empty' } });
-    fireEvent.click(screen.getByRole('button', { name: /Analyze Vibe/i }));
+    await act(async () => { render(<App />); });
 
-    await waitFor(() => {
-      expect(screen.getByText('No recent posts found in r/empty.')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'empty' } });
+      fireEvent.click(screen.getByRole('button', { name: /CHECK THE VIBE/i }));
     });
+    expect(screen.getAllByText(/No recent posts found in r\/empty\./)[0]).toBeInTheDocument();
   });
 
   it('shows loading state and prevents duplicate submissions', async () => {
-    // Return a promise that doesn't resolve immediately to keep it in loading state
     let resolveFetch;
-    const fetchPromise = new Promise(resolve => {
-      resolveFetch = resolve;
-    });
-    global.fetch.mockReturnValueOnce(fetchPromise);
+    const fetchPromise = new Promise(resolve => { resolveFetch = resolve; });
 
-    render(<App />);
-    
+    global.fetch = createMockFetch({
+      dataSource: 'live',
+      responses: [fetchPromise]
+    });
+
+    await act(async () => { render(<App />); });
+
+    const button = screen.getByRole('button', { name: /CHECK THE VIBE/i });
     fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'nba' } });
-    const button = screen.getByRole('button', { name: /Analyze Vibe/i });
-    
     fireEvent.click(button);
-    
-    // It should go into loading state
+
     await waitFor(() => {
       expect(button).toBeDisabled();
-      expect(button).toHaveTextContent('Analyzing...');
+      expect(button).toHaveTextContent(/ANALYZING/i);
     });
-    
-    // Clicking again should not trigger another fetch because button is disabled
-    fireEvent.click(button);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
 
-    // Resolve the promise to clean up
-    resolveFetch({
-      ok: true,
-      json: async () => ({ subreddit: 'nba', aggregate_vibe_score: 0, posts: [] })
+    fireEvent.click(button);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveFetch({ ok: true, json: () => Promise.resolve({ subreddit: 'nba', aggregate_vibe_score: 0, posts: [] }) });
     });
+  });
+
+  it('shows cached-mode limitation message for uncached subreddit', async () => {
+    global.fetch = createMockFetch({
+      dataSource: 'cached',
+      availableSubreddits: ['nfl', 'nba', 'baseball', 'formula1', 'soccer'],
+      responses: []
+    });
+
+    await act(async () => { render(<App />); });
+
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'technology' } });
+      fireEvent.click(screen.getByRole('button', { name: /CHECK THE VIBE/i }));
+    });
+    expect(screen.getByText(/Live data currently available for/)).toBeInTheDocument();
+
+    const pulseCalls = global.fetch.mock.calls.filter(
+      ([url]) => typeof url === 'string' && url.includes('/api/pulse/')
+    );
+    expect(pulseCalls).toHaveLength(0);
+  });
+
+  it('allows cached subreddit search in cached mode', async () => {
+    global.fetch = createMockFetch({
+      dataSource: 'cached',
+      availableSubreddits: ['nfl', 'nba', 'baseball', 'formula1', 'soccer'],
+      responses: [{
+        ok: true,
+        json: () => Promise.resolve({
+          subreddit: 'nfl',
+          aggregate_vibe_score: 0.1,
+          posts: [{ title: 'NFL Post', sentiment_score: 0.1 }],
+          fetched_at: '2026-08-19T13:39:18Z'
+        })
+      }]
+    });
+
+    await act(async () => { render(<App />); });
+
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText(/Enter subreddit/i), { target: { value: 'nfl' } });
+      fireEvent.click(screen.getByRole('button', { name: /CHECK THE VIBE/i }));
+    });
+    expect(screen.getAllByText(/NFL Post/)[0]).toBeInTheDocument();
+    expect(screen.queryByText(/Live data currently available for/)).not.toBeInTheDocument();
   });
 });

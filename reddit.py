@@ -19,9 +19,14 @@ import feedparser
 # ---------------------------------------------------------------------------
 DATA_SOURCE: str = os.environ.get("DATA_SOURCE", "cached").lower()
 
+# The 5 Quick Select subreddits that have pre-fetched JSON snapshots.
+# Used by fetch_hot_posts_cached and exposed via /api/config.
+CACHED_SUBREDDITS: list[str] = ["nfl", "nba", "baseball", "formula1", "soccer"]
+
 # Resolve the data/ directory relative to this file so it works regardless
 # of the working directory uvicorn is started from.
 _DATA_DIR: Path = Path(__file__).resolve().parent / "data"
+
 
 
 # ===================================================================

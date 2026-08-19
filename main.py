@@ -20,6 +20,18 @@ analyzer = SentimentIntensityAnalyzer()
 def health_check():
     return {"status": "ok"}
 
+@app.get("/api/config")
+def get_config():
+    """Report the active data-source mode so the frontend can adapt its UI.
+
+    - live:   full search works (RSS from Reddit)
+    - cached: only the Quick Select subreddits have data
+    """
+    config = {"data_source": reddit.DATA_SOURCE}
+    if reddit.DATA_SOURCE == "cached":
+        config["available_subreddits"] = reddit.CACHED_SUBREDDITS
+    return config
+
 @app.get("/api/pulse/{subreddit}")
 async def get_pulse(subreddit: str):
     try:

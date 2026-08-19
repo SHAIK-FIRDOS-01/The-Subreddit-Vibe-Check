@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import HeroSearch from './components/HeroSearch';
 import VibeDashboard from './components/VibeDashboard';
 import PostFeed from './components/PostFeed';
@@ -8,13 +8,60 @@ function App() {
   const [error, setError] = useState(null);
   const [pulseData, setPulseData] = useState(null);
 
+  // Backend config: data_source mode and (if cached) available subreddits
+  const [backendConfig, setBackendConfig] = useState(null);
+
   const rawBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
   // Strip any trailing slash from the base URL safely
   const cleanBaseUrl = rawBaseUrl.replace(/\/$/, "");
 
+  // ---------------------------------------------------------------
+  // Fetch backend config on mount to learn the active data source.
+  // This drives the cached-mode limitation message — the frontend
+  // trusts the backend's reported mode, not hostname checks.
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const res = await fetch(`${cleanBaseUrl}/api/config`);
+        if (res.ok) {
+          const cfg = await res.json();
+          setBackendConfig(cfg);
+        }
+      } catch {
+        // Config fetch failed — default to no restrictions so the app
+        // degrades gracefully (searches still go through, backend will
+        // return errors if needed).
+      }
+    };
+    loadConfig();
+  }, [cleanBaseUrl]);
+
   const fetchPulse = async (subreddit) => {
     setLoading(true);
     setError(null);
+
+    // ---------------------------------------------------------------
+    // Client-side guard: if the backend is in cached mode and the
+    // requested subreddit isn't one of the available cached ones,
+    // show a helpful message immediately — no point hitting the
+    // backend for data we know doesn't exist.
+    // ---------------------------------------------------------------
+    if (
+      backendConfig &&
+      backendConfig.data_source === 'cached' &&
+      backendConfig.available_subreddits &&
+      !backendConfig.available_subreddits.includes(subreddit.toLowerCase())
+    ) {
+      setError(
+        'Live data currently available for r/nfl, r/nba, r/baseball, ' +
+        'r/formula1, r/soccer only. Full live search works when run locally ' +
+        '(see README) — hosted API access is limited by Reddit\'s current ' +
+        'developer policy.'
+      );
+      setLoading(false);
+      return;
+    }
 
     try {
       // Construct the final URL perfectly
