@@ -1,7 +1,7 @@
 # The Subreddit Vibe Check
 
 > **Real-time sentiment analysis dashboard for Reddit communities.**
-> Search any subreddit and instantly see how the fanbase is feeling — powered by NLP and live RSS data.
+> Search any subreddit and instantly see how the fanbase is feeling — powered by NLP, live RSS data (localhost), or cached snapshots (production).
 
 ![Hero — Search terminal and aggregate vibe gauge](screenshot-hero.png)
 
@@ -57,7 +57,7 @@ Every post is rendered with its rank number, full wrapping title, a left-edge se
 
 ## Why RSS Instead of the Reddit API?
 
-Reddit's official API requires a registered application with **OAuth 2.0 credentials**, and new applications must go through an **approval and review process** that can take days or even weeks to be granted access. For a project that needed to be built and demonstrated within a tight deadline, waiting on API approval was not viable.
+Reddit's official API requires a registered application with **OAuth 2.0 credentials**, and since November 2025 Reddit closed self-service API/OAuth access to new developers under the **Responsible Builder Policy**. For a project that needed to be built and demonstrated quickly, waiting on API approval was not viable.
 
 **The solution:** Reddit publicly exposes an **RSS feed** for every subreddit at the URL pattern:
 
@@ -77,7 +77,18 @@ This RSS feed returns the same "hot" posts visible on the subreddit's front page
 | **Data richness** | Full post metadata, comments, votes | Titles and basic metadata only |
 | **Reliability** | SLA-backed | Publicly available, no SLA |
 
-The data-fetching layer (`reddit.py`) is designed as a **single swappable module** — once Reddit API credentials are approved, the RSS fetch can be replaced with the official API client without touching any other part of the codebase.
+### Live vs. Cached Data Modes
+
+While RSS works perfectly on **localhost**, cloud hosting providers like Render have their datacenter IPs heavily rate-limited or blocked by Reddit. To solve this, the backend supports **two data modes**, controlled by the `DATA_SOURCE` environment variable:
+
+| Mode | `DATA_SOURCE` | How it works | When to use |
+|---|---|---|---|
+| **Live** | `live` | Fetches from Reddit RSS in real-time | Localhost / local demos |
+| **Cached** | `cached` (default) | Reads from pre-fetched JSON snapshots in `data/` | Production / Render deployment |
+
+The cached snapshots contain **real Reddit data** fetched via the working RSS code and saved locally. Both code paths are fully present in `reddit.py` — the live RSS fetcher is never deleted or commented out.
+
+The data-fetching layer (`reddit.py`) is designed as a **single swappable module** — the `DATA_SOURCE` env var controls which path is active, and the unified `fetch_hot_posts()` dispatcher routes to the correct implementation.
 
 ---
 
@@ -92,8 +103,9 @@ graph LR
     end
 
     subgraph Server["Backend (FastAPI + Python)"]
-        E["/api/pulse/{subreddit}"] --> F[reddit.py — RSS Fetcher]
-        F -->|HTTP GET| G["Reddit RSS Feed\n/r/{sub}/hot.rss"]
+        E["/api/pulse/{subreddit}"] --> F["reddit.py — Dispatcher"]
+        F -->|"DATA_SOURCE=live"| G["Reddit RSS Feed\n/r/{sub}/hot.rss"]
+        F -->|"DATA_SOURCE=cached"| I["data/{sub}.json\nLocal Snapshots"]
         E --> H["VADER Sentiment Analyzer"]
     end
 
@@ -104,11 +116,13 @@ graph LR
 ### Data Flow
 
 1. **User Input** → The user types a subreddit name or clicks a quick-select chip.
-2. **Frontend Request** → `App.jsx` sends a `GET` request to `http://localhost:8000/api/pulse/{subreddit}`.
-3. **RSS Fetch** → The FastAPI backend calls Reddit's public RSS feed and parses up to 50 post titles.
+2. **Frontend Request** → `App.jsx` sends a `GET` request to `/api/pulse/{subreddit}`.
+3. **Data Fetch** → The FastAPI backend checks `DATA_SOURCE`:
+   - `live` → Calls Reddit's public RSS feed and parses up to 50 post titles.
+   - `cached` (default) → Reads from a pre-fetched JSON snapshot in `data/`.
 4. **Sentiment Analysis** → Each title is scored using VADER's `compound` metric (range: −1 to +1).
 5. **Aggregation** → The backend averages all 50 compound scores into a single `aggregate_vibe_score`.
-6. **Response** → The JSON payload (subreddit name, aggregate score, and all 50 scored posts) is returned to the frontend.
+6. **Response** → The JSON payload (subreddit name, aggregate score, scored posts, and optionally `fetched_at`) is returned to the frontend.
 7. **Rendering** → React components render the gauge, signal breakdown, and ranked post feed in real time.
 
 ---
@@ -180,7 +194,22 @@ pip install -r requirements.txt
 
 This installs FastAPI, Uvicorn, VADER Sentiment, httpx, feedparser, and the test libraries.
 
-### 3. Install Frontend Dependencies
+### 3. Configure the Data Source
+
+Copy the example environment file and set your preferred data mode:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` to set `DATA_SOURCE`:
+
+- **`DATA_SOURCE=live`** — fetches from Reddit RSS in real-time (use for localhost demos)
+- **`DATA_SOURCE=cached`** — reads from pre-fetched JSON snapshots in `data/` (default, use for production)
+
+If `DATA_SOURCE` is not set, it defaults to `cached`.
+
+### 4. Install Frontend Dependencies
 
 Navigate to the `frontend/` directory and install the Node packages:
 
@@ -270,8 +299,16 @@ npx vitest run
 the-subreddit-vibe-check/
 │
 ├── main.py                  # FastAPI application — defines /health and /api/pulse endpoints
-├── reddit.py                # RSS fetcher — retrieves hot post titles from Reddit
+├── reddit.py                # Data fetcher — dual-mode: live RSS + cached JSON snapshots
 ├── requirements.txt         # Python dependencies
+├── .env.example             # Example environment config (DATA_SOURCE)
+│
+├── data/                    # Pre-fetched JSON snapshots (used in cached mode)
+│   ├── nfl.json
+│   ├── nba.json
+│   ├── baseball.json
+│   ├── formula1.json
+│   └── soccer.json
 │
 ├── test_main.py             # Backend test — health endpoint
 ├── test_pulse.py            # Backend test — pulse endpoint with mocked RSS
@@ -341,6 +378,8 @@ Each post title receives a **compound score** between −1.0 (most negative) and
 | Current Limitation | Planned Improvement |
 |---|---|
 | Uses RSS feed (titles only) | Migrate to official Reddit API for full post metadata, comment text, and vote counts |
+| Cached data is a static snapshot | Automate periodic re-fetching (e.g. GitHub Actions cron) to keep snapshots fresh |
+| Reddit blocks cloud IPs (Render) | Proxy through a residential IP service, or use a scheduled local snapshot pipeline |
 | No persistent storage | Add a database (e.g. PostgreSQL) to track sentiment trends over time |
 | Analysis limited to post titles | Extend VADER analysis to comment threads for deeper sentiment mining |
 | Single-session data only | Implement historical charting to visualize sentiment trends across days/weeks |

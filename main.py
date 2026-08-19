@@ -23,18 +23,24 @@ def health_check():
 @app.get("/api/pulse/{subreddit}")
 async def get_pulse(subreddit: str):
     try:
-        titles = await reddit.fetch_hot_posts(subreddit)
+        result = await reddit.fetch_hot_posts(subreddit)
+        titles = result["titles"]
+        fetched_at = result.get("fetched_at")
     except ValueError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        error_msg = str(e)
+        # Cached-mode: missing file → 404; Live-mode: Reddit errors → 503
+        if "No cached data" in error_msg:
+            raise HTTPException(status_code=404, detail=error_msg)
+        raise HTTPException(status_code=503, detail=error_msg)
     except Exception as e:
         raise HTTPException(status_code=500, detail="An unexpected error occurred.")
-        
+
     if not titles:
         raise HTTPException(status_code=404, detail=f"No recent posts found in r/{subreddit}.")
-    
+
     posts = []
     total_score = 0.0
-    
+
     for title in titles:
         sentiment_score = analyzer.polarity_scores(title)["compound"]
         total_score += sentiment_score
@@ -42,11 +48,18 @@ async def get_pulse(subreddit: str):
             "title": title,
             "sentiment_score": sentiment_score
         })
-    
+
     aggregate_vibe_score = total_score / len(posts) if posts else 0.0
-    
-    return {
+
+    response = {
         "subreddit": subreddit,
         "aggregate_vibe_score": aggregate_vibe_score,
         "posts": posts
     }
+
+    # Include the snapshot timestamp so the frontend can show
+    # "data as of ..." when serving cached data.
+    if fetched_at is not None:
+        response["fetched_at"] = fetched_at
+
+    return response
