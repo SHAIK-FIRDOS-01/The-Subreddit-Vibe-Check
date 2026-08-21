@@ -16,8 +16,7 @@ import feedparser
 #                         Use this on Render / production where Reddit blocks
 #                         datacenter IPs.  This is the DEFAULT if the env var
 #                         is not set, so production is safe out of the box.
-# ---------------------------------------------------------------------------
-DATA_SOURCE: str = os.environ.get("DATA_SOURCE", "cached").lower()
+DATA_SOURCE: str = os.environ.get("DATA_SOURCE", "live").lower()
 
 # The 5 Quick Select subreddits that have pre-fetched JSON snapshots.
 # Used by fetch_hot_posts_cached and exposed via /api/config.
